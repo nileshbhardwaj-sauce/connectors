@@ -21,14 +21,21 @@ OBSERVABLE_EXTENSION = "extension-definition--f93e2c80-4231-4f9a-af8b-95c9bd566a
 
 
 class _Logger:
+    def __init__(self):
+        self.warnings = []
+
     def info(self, *args, **kwargs):
         pass
 
-    debug = warning = error = info
+    debug = error = info
+
+    def warning(self, message, meta=None):
+        self.warnings.append((message, meta))
 
 
 class _Helper:
-    connector_logger = _Logger()
+    def __init__(self):
+        self.connector_logger = _Logger()
 
 
 class _Config:
@@ -42,6 +49,7 @@ class _Config:
     elastic_index_name = INDEX_NAME
     elastic_kibana_url = None
     elastic_opencti_external_url = "http://opencti.test"
+    default_score = 50
 
 
 def make_indicator(score=None, pattern_type="stix", confidence=10):
@@ -186,6 +194,44 @@ def test_create_siem_rule_should_use_default_score_when_score_is_missing(
     assert rule["severity"] == "medium"
 
 
+def test_create_siem_rule_should_use_configured_default_score_when_score_is_missing(
+    requests_mock,
+):
+    config = _Config()
+    config.default_score = 20
+    handler = ElasticApiHandler(_Helper(), config)
+    requests_mock.post(RULES_URL, json={"id": "rule-1"}, status_code=200)
+    indicator = make_indicator(score=None, pattern_type="kql")
+
+    handler._create_siem_rule(indicator)
+
+    rule = _sent_rule(requests_mock)
+    assert rule["risk_score"] == 20
+    assert rule["severity"] == "low"
+
+
+def test_rule_risk_score_should_log_warning_when_score_is_missing(handler):
+    indicator = make_indicator(score=None)
+
+    handler._calculate_risk_score(indicator)
+
+    assert handler.helper.connector_logger.warnings == [
+        (
+            "Indicator has no OpenCTI score, using the default score for the SIEM rule",
+            {"opencti_id": indicator["id"], "default_score": 50},
+        )
+    ]
+
+
+def test_rule_risk_score_should_not_log_warning_when_score_is_present(handler):
+    indicator = make_indicator(score=0)
+
+    risk_score = handler._calculate_risk_score(indicator)
+
+    assert risk_score == 0
+    assert handler.helper.connector_logger.warnings == []
+
+
 def test_process_indicator_update_should_send_score_to_rule_and_document(
     handler, requests_mock
 ):
@@ -201,24 +247,20 @@ def test_process_indicator_update_should_send_score_to_rule_and_document(
 
 
 @pytest.mark.parametrize(
-    "score, expected_risk, expected_severity",
-    [(0, 0, "low"), (39, 39, "low"), (60, 60, "high"), (150, 100, "critical")],
+    "risk_score, expected_severity",
+    [
+        (100, "critical"),
+        (80, "critical"),
+        (79, "high"),
+        (60, "high"),
+        (59, "medium"),
+        (40, "medium"),
+        (39, "low"),
+        (0, "low"),
+    ],
 )
-def test_rule_score_should_be_clamped_and_mapped_to_severity(
-    handler, score, expected_risk, expected_severity
-):
-    indicator = make_indicator(score=score)
-
-    assert handler._calculate_risk_score(indicator) == expected_risk
-    assert handler._get_severity(indicator) == expected_severity
-
-
-@pytest.mark.parametrize("score", ["high", True, None])
-def test_rule_score_should_use_default_when_score_is_not_a_number(handler, score):
-    indicator = make_indicator()
-    indicator["extensions"][INDICATOR_EXTENSION]["score"] = score
-
-    assert handler._calculate_risk_score(indicator) == 50
+def test_rule_severity_should_follow_score_thresholds(risk_score, expected_severity):
+    assert ElasticApiHandler._get_severity(risk_score) == expected_severity
 
 
 def test_index_template_should_map_score_as_long(handler, requests_mock):

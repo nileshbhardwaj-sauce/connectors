@@ -81,6 +81,7 @@ There are a number of configuration options, which are set either in `docker-com
 | Index Name                 | elastic_security.index_name            | `ELASTIC_SECURITY_INDEX_NAME`            | logs-ti_custom_opencti.indicator | No        | Threat intelligence index name.                                   |
 | Indicator Expire Time      | elastic_security.indicator_expire_time | `ELASTIC_SECURITY_INDICATOR_EXPIRE_TIME` | 90                               | No        | Days before indicators expire.                                    |
 | Batch Size                 | elastic_security.batch_size            | `ELASTIC_SECURITY_BATCH_SIZE`            | 100                              | No        | Batch size for bulk operations.                                   |
+| Default Score              | elastic_security.default_score         | `ELASTIC_SECURITY_DEFAULT_SCORE`         | 50                               | No        | SIEM rule risk score (0-100) used when an indicator has no score. |
 
 ## Deployment
 
@@ -234,10 +235,12 @@ The connector reads the OpenCTI score from the STIX extensions of the streamed i
 | Elastic Output          | Field                         | Value                                                                 |
 |-------------------------|-------------------------------|-----------------------------------------------------------------------|
 | Threat indicator        | `opencti.indicator.score`     | OpenCTI score (0-100). Omitted when the entity has no score.          |
-| SIEM rule               | `risk_score`                  | OpenCTI score clamped to 0-100, or 50 when the entity has no score.   |
+| SIEM rule               | `risk_score`                  | OpenCTI score, or `ELASTIC_SECURITY_DEFAULT_SCORE` (50 by default) when the indicator has no score. |
 | SIEM rule               | `severity`                    | From the rule risk score: `critical` (80+), `high` (60-79), `medium` (40-59), `low` (below 40). |
 
-ECS has no score field: `threat.indicator.sightings` is a count of observations, so the connector uses `opencti.indicator.score`, the same field as the official Elastic OpenCTI integration. The default of 50 matches the OpenCTI default score.
+ECS has no score field: `threat.indicator.sightings` is a count of observations, so the connector uses `opencti.indicator.score`, the same field as the official Elastic OpenCTI integration.
+
+Kibana requires a risk score on every rule. OpenCTI gives every indicator a score at creation (50 by default), so a missing score is unexpected: the connector then uses `ELASTIC_SECURITY_DEFAULT_SCORE` to keep the rule and logs a warning with the indicator ID.
 
 ## Debugging
 

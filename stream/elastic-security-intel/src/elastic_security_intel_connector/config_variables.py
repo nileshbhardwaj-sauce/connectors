@@ -115,3 +115,16 @@ class ConfigConnector:
             isNumber=True,
             default=100,
         )
+        # SIEM rule risk score used when an indicator has no OpenCTI score
+        # (50 is the OpenCTI default score for indicators)
+        self.default_score = get_config_variable(
+            "ELASTIC_SECURITY_DEFAULT_SCORE",
+            ["elastic_security", "default_score"],
+            self.load,
+            isNumber=True,
+            default=50,
+        )
+        if not 0 <= self.default_score <= 100:
+            raise ValueError(
+                "ELASTIC_SECURITY_DEFAULT_SCORE must be an integer between 0 and 100"
+            )

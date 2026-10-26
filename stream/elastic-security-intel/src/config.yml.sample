@@ -21,3 +21,4 @@ elastic_security:
   index_name: 'logs-ti_custom_opencti.indicator' # Custom index with proper mappings
   indicator_expire_time: 90 # Days before indicators expire
   batch_size: 100 # Batch size for bulk operations
+  default_score: 50 # SIEM rule risk score (0-100) used when an indicator has no score

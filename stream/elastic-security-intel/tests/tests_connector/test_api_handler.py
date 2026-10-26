@@ -39,6 +39,7 @@ class _Config:
     elastic_index_name = INDEX_NAME
     elastic_kibana_url = None
     elastic_opencti_external_url = "http://opencti.test"
+    default_score = 50
 
 
 @pytest.fixture
